@@ -9,6 +9,8 @@ import java.util.*;
 @CrossOrigin(origins = "http://localhost:5173")
 public class TaskController {
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final TaskRepository taskRepository;
 
     public TaskController(TaskRepository taskRepository) {
@@ -26,10 +28,19 @@ public class TaskController {
         String query = q == null ? "" : q.trim();
         String searchTerm = "%" + query.toLowerCase() + "%";
 
+        if (page < 1 || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
+            return ResponseEntity.badRequest().body("page must be at least 1 and pageSize must be between 1 and "
+                    + MAX_PAGE_SIZE);
+        }
+
         // Parse status filter
         String normalizedStatus = null;
-        if (status != null && !status.isEmpty()) {
-            normalizedStatus = TaskStatus.valueOf(status.toUpperCase()).name();
+        if (status != null && !status.trim().isEmpty()) {
+            try {
+                normalizedStatus = TaskStatus.valueOf(status.trim().toUpperCase()).name();
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body("status must be one of OPEN, IN_PROGRESS, or DONE");
+            }
         }
 
         // Query complexity estimation for logging
@@ -47,9 +58,10 @@ public class TaskController {
 
         List<Task> allResults = taskRepository.searchTasks(searchTerm, normalizedStatus);
 
-        int start = (page - 1) * pageSize;
+        long startOffset = (long) (page - 1) * pageSize;
+        int start = startOffset >= allResults.size() ? allResults.size() : (int) startOffset;
         int end = Math.min(start + pageSize, allResults.size());
-        List<Task> pageResults = (start < allResults.size())
+        List<Task> pageResults = (startOffset < allResults.size())
                 ? allResults.subList(start, end)
                 : Collections.emptyList();
 
